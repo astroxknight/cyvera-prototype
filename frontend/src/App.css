@@ -1,0 +1,6 @@
+/* App.css is intentionally minimal — global styles live in index.css and
+   styles/components.css. */
+
+#root {
+  isolation: isolate;
+}

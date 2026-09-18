@@ -1,0 +1,194 @@
+:root {
+  /* Background palette */
+  --bg-primary: #080d18;
+  --bg-secondary: #0d1424;
+  --bg-tertiary: #121c30;
+  --bg-elevated: #192640;
+  --bg-hover: #20304d;
+
+  /* Border colors */
+  --border-subtle: #1b2a43;
+  --border-default: #2b3d5e;
+  --border-strong: #456087;
+
+  /* Text colors */
+  --text-primary: #edf5ff;
+  --text-secondary: #a7b8d2;
+  --text-tertiary: #7185a5;
+  --text-muted: #526581;
+
+  /* Brand colors - CYVERA cyan/teal */
+  --brand-50: #e6fbff;
+  --brand-100: #b3f4ff;
+  --brand-200: #80edff;
+  --brand-300: #67e8f9;
+  --brand-400: #22d3ee;
+  --brand-500: #06b6d4;
+  --brand-600: #0891b2;
+  --brand-700: #0e7490;
+  --brand-800: #005066;
+  --brand-900: #002433;
+
+  /* Status colors */
+  --critical: #ff3b5c;
+  --critical-bg: rgba(255, 59, 92, 0.12);
+  --critical-border: rgba(255, 59, 92, 0.3);
+
+  --high: #ff8c42;
+  --high-bg: rgba(255, 140, 66, 0.12);
+  --high-border: rgba(255, 140, 66, 0.3);
+
+  --medium: #ffc233;
+  --medium-bg: rgba(255, 194, 51, 0.12);
+  --medium-border: rgba(255, 194, 51, 0.3);
+
+  --low: #4de5ff;
+  --low-bg: rgba(77, 229, 255, 0.12);
+  --low-border: rgba(77, 229, 255, 0.3);
+
+  --info: #9b8cff;
+  --info-bg: rgba(155, 140, 255, 0.12);
+  --info-border: rgba(155, 140, 255, 0.3);
+
+  --success: #3ddc97;
+  --success-bg: rgba(61, 220, 151, 0.12);
+  --success-border: rgba(61, 220, 151, 0.3);
+
+  /* Sizing */
+  --sidebar-width: 240px;
+  --sidebar-width-collapsed: 64px;
+  --topbar-height: 60px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.5);
+  --shadow-glow: 0 0 20px rgba(0, 212, 255, 0.15);
+
+  /* Radii */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+
+  /* Transitions */
+  --transition-fast: 150ms ease;
+  --transition-base: 200ms ease;
+  --transition-slow: 300ms ease;
+
+  /* Font */
+  --font-sans: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', 'Monaco', 'Inconsolata',
+    'Fira Code', monospace;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Background subtle grid */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: linear-gradient(
+      rgba(0, 212, 255, 0.025) 1px,
+      transparent 1px
+    ),
+    linear-gradient(90deg, rgba(0, 212, 255, 0.025) 1px, transparent 1px);
+  background-size: 32px 32px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--brand-300);
+  outline-offset: 2px;
+}
+
+input,
+select,
+textarea {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  background: transparent;
+  border: none;
+  outline: none;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+ul {
+  list-style: none;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+}
+
+/* Utility */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
