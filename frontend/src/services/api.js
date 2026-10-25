@@ -7,284 +7,124 @@
 //
 // ML / database / detection logic must live on the server side, not here.
 
-import {
-  sampleLogs,
-  sampleAlerts,
-  sampleSignatures,
-  sampleTrend,
-  sampleSeverityDistribution,
-  sampleActivity,
-} from '../data/sampleData';
+const API_BASE_URL = `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}/api`;
 
-// In-memory store so the demo supports create / update / delete operations
-// against signatures without a backend.
-let signaturesStore = [...sampleSignatures];
-let alertsStore = [...sampleAlerts];
+async function request(path, options) {
+  let response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, options);
+  } catch {
+    throw new Error('Cyvera API is unavailable. Start the backend and try again.');
+  }
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(result.detail || `Request failed (${response.status})`);
+  }
+  return result;
+}
 
-// Simulated network latency so loading states are visible during the demo.
-const delay = (ms = 350) => new Promise((r) => setTimeout(r, ms));
-
-const clone = (obj) => JSON.parse(JSON.stringify(obj));
+function queryString(filters = {}) {
+  const params = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '' && value !== 'all') {
+      params.set(key, String(value));
+    }
+  });
+  const query = params.toString();
+  return query ? `?${query}` : '';
+}
 
 // -------- Dashboard summary --------
 
 export async function fetchDashboardSummary() {
-  await delay();
-  const logs = sampleLogs;
-  const total = 214789;
-  const threats = sampleAlerts.filter(
-    (a) => a.severity === 'critical' || a.severity === 'high'
-  ).length;
-  const anomalies = sampleAlerts.filter((a) => a.detectionMethod === 'anomaly')
-    .length;
-  const normal = sampleLogs.filter((l) => l.severity === 'info' || l.severity === 'low')
-    .length;
-
-  return {
-    totalLogs: total,
-    threatsDetected: threats * 137 + 2841, // scaled for realistic volume
-    anomalies: anomalies * 89 + 612,
-    normalLogs: total - (threats * 137 + 2841) - (anomalies * 89 + 612),
-    deltaTotal: 4.2,
-    deltaThreats: 12.7,
-    deltaAnomalies: -3.4,
-    deltaNormal: 4.9,
-  };
+  return request('/dashboard/summary');
 }
 
 export async function fetchTrend() {
-  await delay(200);
-  return clone(sampleTrend);
+  return request('/dashboard/trend');
 }
 
 export async function fetchSeverityDistribution() {
-  await delay(200);
-  return clone(sampleSeverityDistribution);
+  return request('/dashboard/severity-distribution');
 }
 
 export async function fetchHourlyActivity() {
-  await delay(200);
-  return clone(sampleActivity);
+  return request('/dashboard/hourly-activity');
 }
 
 // -------- Logs --------
 
 export async function fetchLogs(filters = {}) {
-  await delay();
-  let result = clone(sampleLogs);
-
-  if (filters.severity && filters.severity !== 'all') {
-    result = result.filter((l) => l.severity === filters.severity);
-  }
-  if (filters.type && filters.type !== 'all') {
-    result = result.filter((l) => l.type === filters.type);
-  }
-  if (filters.search) {
-    const q = filters.search.toLowerCase();
-    result = result.filter(
-      (l) =>
-        l.id.toLowerCase().includes(q) ||
-        l.message.toLowerCase().includes(q) ||
-        l.sourceIp.toLowerCase().includes(q) ||
-        l.destinationIp.toLowerCase().includes(q) ||
-        l.endpoint.toLowerCase().includes(q)
-    );
-  }
-
-  return {
-    items: result,
-    total: result.length,
-  };
+  return request(`/logs${queryString(filters)}`);
 }
 
 export async function fetchLogTypes() {
-  await delay(100);
-  const set = new Set(sampleLogs.map((l) => l.type));
-  return Array.from(set).sort();
+  return request('/logs/types');
 }
 
-// Simulated file upload — in a real backend this would POST to /api/logs/upload
-// and the server would return a job id that the client polls.
 export async function uploadLogFile(file) {
-  await delay(800);
   if (!file) {
     throw new Error('No file provided');
   }
-  const allowed = ['.log', '.txt', '.csv', '.json'];
-  const name = file.name.toLowerCase();
-  if (!allowed.some((ext) => name.endsWith(ext))) {
-    throw new Error('Unsupported file type. Use .log, .txt, .csv, or .json');
-  }
-  return {
-    jobId: 'JOB-' + Math.random().toString(36).slice(2, 8).toUpperCase(),
-    filename: file.name,
-    size: file.size,
-    acceptedAt: new Date().toISOString(),
-  };
+  const form = new FormData();
+  form.append('file', file);
+  return request('/logs/upload', { method: 'POST', body: form });
 }
 
-// Simulated analysis job status — replace with polling of a real job id.
 export async function fetchAnalysisStatus(jobId) {
-  await delay(150);
-  // Return a fixed sequence so the UI walks through a realistic lifecycle.
-  const sequence = ['queued', 'parsing', 'analyzing', 'enriching', 'done'];
-  const idx = Math.min(
-    sequence.length - 1,
-    Math.floor((Date.now() / 1000) % sequence.length)
-  );
-  return {
-    jobId,
-    stage: sequence[idx],
-    progress: Math.round(((idx + 1) / sequence.length) * 100),
-    processed: 1000 * (idx + 1),
-    threats: 0,
-  };
+  return request(`/logs/analysis/${encodeURIComponent(jobId)}`);
 }
 
 // -------- Alerts --------
 
 export async function fetchAlerts(filters = {}) {
-  await delay();
-  let result = clone(alertsStore);
-
-  if (filters.severity && filters.severity !== 'all') {
-    result = result.filter((a) => a.severity === filters.severity);
-  }
-  if (filters.status && filters.status !== 'all') {
-    result = result.filter((a) => a.status === filters.status);
-  }
-  if (filters.method && filters.method !== 'all') {
-    result = result.filter((a) => a.detectionMethod === filters.method);
-  }
-  if (filters.search) {
-    const q = filters.search.toLowerCase();
-    result = result.filter(
-      (a) =>
-        a.id.toLowerCase().includes(q) ||
-        a.title.toLowerCase().includes(q) ||
-        a.sourceIp.toLowerCase().includes(q) ||
-        a.description.toLowerCase().includes(q)
-    );
-  }
-
-  // newest first
-  result.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-  return { items: result, total: result.length };
+  return request(`/alerts${queryString(filters)}`);
 }
 
 export async function fetchAlertById(id) {
-  await delay(150);
-  const alert = alertsStore.find((a) => a.id === id);
-  if (!alert) throw new Error('Alert not found');
-  let signature = null;
-  if (alert.signatureId) {
-    signature = signaturesStore.find((s) => s.id === alert.signatureId) || null;
-  }
-  const logs = sampleLogs.filter((l) => alert.relatedLogIds.includes(l.id));
-  return { alert: clone(alert), signature: signature ? clone(signature) : null, logs: clone(logs) };
+  return request(`/alerts/${encodeURIComponent(id)}`);
 }
 
 export async function updateAlertStatus(id, status) {
-  await delay(150);
-  alertsStore = alertsStore.map((a) =>
-    a.id === id ? { ...a, status, updatedAt: new Date().toISOString() } : a
-  );
-  return clone(alertsStore.find((a) => a.id === id));
+  return request(`/alerts/${encodeURIComponent(id)}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status }),
+  });
 }
 
 // -------- Signatures --------
 
 export async function fetchSignatures(filters = {}) {
-  await delay();
-  let result = clone(signaturesStore);
-  if (filters.severity && filters.severity !== 'all') {
-    result = result.filter((s) => s.severity === filters.severity);
-  }
-  if (filters.category && filters.category !== 'all') {
-    result = result.filter((s) => s.category === filters.category);
-  }
-  if (filters.enabled && filters.enabled !== 'all') {
-    const flag = filters.enabled === 'true';
-    result = result.filter((s) => s.enabled === flag);
-  }
-  if (filters.search) {
-    const q = filters.search.toLowerCase();
-    result = result.filter(
-      (s) =>
-        s.id.toLowerCase().includes(q) ||
-        s.name.toLowerCase().includes(q) ||
-        s.description.toLowerCase().includes(q) ||
-        s.pattern.toLowerCase().includes(q)
-    );
-  }
-  return { items: result, total: result.length };
+  return request(`/signatures${queryString(filters)}`);
 }
 
 export async function fetchSignatureCategories() {
-  await delay(100);
-  const set = new Set(signaturesStore.map((s) => s.category));
-  return Array.from(set).sort();
+  return request('/signatures/categories');
 }
 
 export async function createSignature(payload) {
-  await delay(200);
-  const newSig = {
-    id: 'SIG-' + String(signaturesStore.length + 1).padStart(3, '0'),
-    name: payload.name,
-    description: payload.description,
-    pattern: payload.pattern,
-    severity: payload.severity,
-    category: payload.category,
-    enabled: payload.enabled ?? true,
-    author: payload.author || 'soc.team',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    matches: 0,
-  };
-  signaturesStore = [newSig, ...signaturesStore];
-  return clone(newSig);
+  return request('/signatures', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
 }
 
 export async function updateSignature(id, payload) {
-  await delay(200);
-  let updated = null;
-  signaturesStore = signaturesStore.map((s) => {
-    if (s.id === id) {
-      updated = {
-        ...s,
-        ...payload,
-        updatedAt: new Date().toISOString(),
-      };
-      return updated;
-    }
-    return s;
+  return request(`/signatures/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
   });
-  if (!updated) throw new Error('Signature not found');
-  return clone(updated);
 }
 
 export async function deleteSignature(id) {
-  await delay(150);
-  const before = signaturesStore.length;
-  signaturesStore = signaturesStore.filter((s) => s.id !== id);
-  if (signaturesStore.length === before) {
-    throw new Error('Signature not found');
-  }
-  return { ok: true };
+  return request(`/signatures/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
 export async function toggleSignature(id) {
-  await delay(120);
-  let updated = null;
-  signaturesStore = signaturesStore.map((s) => {
-    if (s.id === id) {
-      updated = { ...s, enabled: !s.enabled, updatedAt: new Date().toISOString() };
-      return updated;
-    }
-    return s;
-  });
-  if (!updated) throw new Error('Signature not found');
-  return clone(updated);
+  return request(`/signatures/${encodeURIComponent(id)}/toggle`, { method: 'POST' });
 }
 
 // -------- Settings (local-only) --------
