@@ -54,7 +54,8 @@ def initialize_database() -> None:
                 severity TEXT NOT NULL,
                 type TEXT NOT NULL,
                 source_ip TEXT NOT NULL,
-                payload TEXT NOT NULL
+                payload TEXT NOT NULL,
+                upload_id TEXT
             );
             CREATE INDEX IF NOT EXISTS idx_logs_time ON logs(timestamp);
             CREATE INDEX IF NOT EXISTS idx_logs_severity ON logs(severity);
@@ -63,7 +64,8 @@ def initialize_database() -> None:
                 timestamp TEXT NOT NULL,
                 severity TEXT NOT NULL,
                 status TEXT NOT NULL,
-                payload TEXT NOT NULL
+                payload TEXT NOT NULL,
+                upload_id TEXT
             );
             CREATE INDEX IF NOT EXISTS idx_alerts_time ON alerts(timestamp);
             CREATE INDEX IF NOT EXISTS idx_alerts_severity ON alerts(severity);
@@ -82,6 +84,11 @@ def initialize_database() -> None:
             );
             """
         )
+        for table in ("logs", "alerts"):
+            columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+            if "upload_id" not in columns:  # databases created before per-upload tracking
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN upload_id TEXT")
+            conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{table}_upload ON {table}(upload_id)")
         # Older databases were seeded with demo logs/alerts; remove exactly those rows.
         conn.executemany("DELETE FROM logs WHERE id = ?", [(i,) for i in LEGACY_SEED_LOG_IDS])
         conn.executemany("DELETE FROM alerts WHERE id = ?", [(i,) for i in LEGACY_SEED_ALERT_IDS])
@@ -126,12 +133,12 @@ def logs_by_ids(log_ids: list[str]) -> list[dict[str, Any]]:
         return [json.loads(row["payload"]) for row in rows]
 
 
-def insert_logs(logs: list[dict[str, Any]]) -> int:
+def insert_logs(logs: list[dict[str, Any]], upload_id: str | None = None) -> int:
     with connection() as conn:
         cursor = conn.executemany(
-            "INSERT OR IGNORE INTO logs (id, timestamp, severity, type, source_ip, payload) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT OR IGNORE INTO logs (id, timestamp, severity, type, source_ip, payload, upload_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
             [
-                (item["id"], item["timestamp"], item["severity"], item["type"], item["sourceIp"], json.dumps(item))
+                (item["id"], item["timestamp"], item["severity"], item["type"], item["sourceIp"], json.dumps(item), upload_id)
                 for item in logs
             ],
         )
@@ -166,12 +173,12 @@ def get_alert(alert_id: str) -> dict[str, Any] | None:
         return _decode(conn.execute("SELECT payload FROM alerts WHERE id = ?", (alert_id,)).fetchone())
 
 
-def save_alert(alert: dict[str, Any]) -> None:
+def save_alert(alert: dict[str, Any], upload_id: str | None = None) -> None:
     with connection() as conn:
         conn.execute(
-            "INSERT INTO alerts (id, timestamp, severity, status, payload) VALUES (?, ?, ?, ?, ?) "
+            "INSERT INTO alerts (id, timestamp, severity, status, payload, upload_id) VALUES (?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(id) DO UPDATE SET severity=excluded.severity, status=excluded.status, payload=excluded.payload",
-            (alert["id"], alert["timestamp"], alert["severity"], alert["status"], json.dumps(alert)),
+            (alert["id"], alert["timestamp"], alert["severity"], alert["status"], json.dumps(alert), upload_id),
         )
 
 
@@ -242,6 +249,52 @@ def save_job(job: dict[str, Any]) -> None:
 def get_job(job_id: str) -> dict[str, Any] | None:
     with connection() as conn:
         return _decode(conn.execute("SELECT payload FROM analysis_jobs WHERE id = ?", (job_id,)).fetchone())
+
+
+def list_jobs() -> list[dict[str, Any]]:
+    """Completed uploads, newest first."""
+    with connection() as conn:
+        jobs = [json.loads(row["payload"]) for row in conn.execute("SELECT payload FROM analysis_jobs")]
+    return sorted(jobs, key=lambda job: job.get("acceptedAt", ""), reverse=True)
+
+
+def _subtract_signature_matches(conn: sqlite3.Connection, counts: dict[str, int]) -> None:
+    for signature_id, amount in counts.items():
+        row = conn.execute("SELECT payload FROM signatures WHERE id = ?", (signature_id,)).fetchone()
+        if row:
+            signature = json.loads(row["payload"])
+            signature["matches"] = max(0, signature.get("matches", 0) - amount)
+            conn.execute("UPDATE signatures SET payload = ? WHERE id = ?", (json.dumps(signature), signature_id))
+
+
+def delete_upload(job_id: str) -> dict[str, int] | None:
+    """Remove one upload with its logs and alerts. None if the upload is unknown."""
+    with connection() as conn:
+        if not conn.execute("SELECT 1 FROM analysis_jobs WHERE id = ?", (job_id,)).fetchone():
+            return None
+        matches: dict[str, int] = {}
+        for row in conn.execute("SELECT payload FROM alerts WHERE upload_id = ?", (job_id,)):
+            signature_id = json.loads(row["payload"]).get("signatureId")
+            if signature_id:
+                matches[signature_id] = matches.get(signature_id, 0) + 1
+        alerts_deleted = conn.execute("DELETE FROM alerts WHERE upload_id = ?", (job_id,)).rowcount
+        logs_deleted = conn.execute("DELETE FROM logs WHERE upload_id = ?", (job_id,)).rowcount
+        conn.execute("DELETE FROM analysis_jobs WHERE id = ?", (job_id,))
+        _subtract_signature_matches(conn, matches)
+    return {"logsDeleted": logs_deleted, "alertsDeleted": alerts_deleted}
+
+
+def clear_all_data() -> dict[str, int]:
+    """Remove every log, alert and upload record; signatures and settings are kept."""
+    with connection() as conn:
+        alerts_deleted = conn.execute("DELETE FROM alerts").rowcount
+        logs_deleted = conn.execute("DELETE FROM logs").rowcount
+        uploads_deleted = conn.execute("DELETE FROM analysis_jobs").rowcount
+        for row in conn.execute("SELECT id, payload FROM signatures").fetchall():
+            signature = json.loads(row["payload"])
+            signature["matches"] = 0
+            conn.execute("UPDATE signatures SET payload = ? WHERE id = ?", (json.dumps(signature), row["id"]))
+    return {"logsDeleted": logs_deleted, "alertsDeleted": alerts_deleted, "uploadsDeleted": uploads_deleted}
 
 
 def new_id(prefix: str) -> str:

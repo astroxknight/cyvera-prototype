@@ -78,6 +78,22 @@ export async function uploadLogFile(file) {
   return job;
 }
 
+export async function fetchUploads() {
+  return request('/uploads');
+}
+
+export async function deleteUpload(jobId) {
+  const result = await request(`/uploads/${encodeURIComponent(jobId)}`, { method: 'DELETE' });
+  notifyDataChanged();
+  return result;
+}
+
+export async function clearAllData() {
+  const result = await request('/data?confirm=true', { method: 'DELETE' });
+  notifyDataChanged();
+  return result;
+}
+
 export async function fetchAnalysisStatus(jobId) {
   return request(`/logs/analysis/${encodeURIComponent(jobId)}`);
 }

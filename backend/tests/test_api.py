@@ -73,9 +73,9 @@ def test_legacy_seeded_logs_and_alerts_are_removed_on_startup(tmp_path, monkeypa
     database.initialize_database()
     row = ("2026-10-25T10:00:00+00:00", "info", "application", "10.0.0.1", "{}")
     with database.connection() as conn:
-        conn.execute("INSERT INTO logs VALUES ('LOG-78421', ?, ?, ?, ?, ?)", row)
-        conn.execute("INSERT INTO logs VALUES ('LOG-REAL0001', ?, ?, ?, ?, ?)", row)
-        conn.execute("INSERT INTO alerts VALUES ('ALR-2901', ?, 'high', 'open', '{}')", (row[0],))
+        conn.execute("INSERT INTO logs (id, timestamp, severity, type, source_ip, payload) VALUES ('LOG-78421', ?, ?, ?, ?, ?)", row)
+        conn.execute("INSERT INTO logs (id, timestamp, severity, type, source_ip, payload) VALUES ('LOG-REAL0001', ?, ?, ?, ?, ?)", row)
+        conn.execute("INSERT INTO alerts (id, timestamp, severity, status, payload) VALUES ('ALR-2901', ?, 'high', 'open', '{}')", (row[0],))
 
     database.initialize_database()
 
@@ -174,3 +174,94 @@ def test_open_alert_count_follows_uploads_and_status_changes(client):
     first = open_alerts["items"][0]["id"]
     client.patch(f"/api/alerts/{first}/status", json={"status": "resolved"})
     assert client.get("/api/alerts", params={"status": "open"}).json()["total"] == open_alerts["total"] - 1
+
+
+SECOND_CSV = (
+    "timestamp,sourceIp,destinationIp,method,endpoint,statusCode,bytes,message\n"
+    "2026-10-26T09:00:00Z,198.51.100.77,10.0.0.20,GET,/wp-config.php,404,32,Config probe\n"
+    "2026-10-26T09:00:01Z,10.0.0.1,10.0.0.2,GET,/health,200,50,Health check\n"
+)
+
+
+def _signature_matches(client, sig_id):
+    return next(s for s in client.get("/api/signatures").json()["items"] if s["id"] == sig_id)["matches"]
+
+
+def test_uploads_are_listed_newest_first(client):
+    first = _upload(client, name="first.csv").json()
+    second = _upload(client, SECOND_CSV, "second.csv").json()
+
+    items = client.get("/api/uploads").json()
+    assert items["total"] == 2
+    assert [item["jobId"] for item in items["items"]] == [second["jobId"], first["jobId"]]
+    assert items["items"][0]["filename"] == "second.csv"
+
+
+def test_delete_upload_removes_only_that_uploads_data_and_signature_counts(client):
+    first = _upload(client, name="first.csv").json()
+    second = _upload(client, SECOND_CSV, "second.csv").json()
+    assert _signature_matches(client, "SIG-003") == 2
+
+    result = client.delete(f"/api/uploads/{first['jobId']}")
+
+    assert result.status_code == 200
+    body = result.json()
+    assert body["deleted"] == first["jobId"] and body["logsDeleted"] == 2 and body["alertsDeleted"] >= 1
+    assert client.get("/api/logs", params={"search": "203.0.113.250"}).json()["total"] == 0
+    assert client.get("/api/logs", params={"search": "198.51.100.77"}).json()["total"] == 1
+    assert [item["jobId"] for item in client.get("/api/uploads").json()["items"]] == [second["jobId"]]
+    assert client.get(f"/api/logs/analysis/{first['jobId']}").status_code == 404
+    assert _signature_matches(client, "SIG-003") == 1
+    assert client.delete(f"/api/uploads/{first['jobId']}").status_code == 404
+
+
+def test_status_update_keeps_alert_tied_to_its_upload(client):
+    job = _upload(client).json()
+    alert = client.get("/api/alerts").json()["items"][0]
+    client.patch(f"/api/alerts/{alert['id']}/status", json={"status": "investigating"})
+
+    client.delete(f"/api/uploads/{job['jobId']}")
+
+    assert client.get("/api/alerts").json()["total"] == 0
+
+
+def test_clear_all_data_requires_confirmation_and_keeps_signatures_and_settings(client):
+    _upload(client)
+    _upload(client, SECOND_CSV, "second.csv")
+    client.put("/api/settings", json={"orgName": "Keep Me"})
+    signatures_before = client.get("/api/signatures").json()["total"]
+
+    assert client.delete("/api/data").status_code == 400
+    assert client.get("/api/logs").json()["total"] == 4
+
+    result = client.delete("/api/data", params={"confirm": "true"})
+
+    assert result.status_code == 200
+    assert result.json()["logsDeleted"] == 4 and result.json()["uploadsDeleted"] == 2
+    assert client.get("/api/logs").json()["total"] == 0
+    assert client.get("/api/alerts").json()["total"] == 0
+    assert client.get("/api/uploads").json()["total"] == 0
+    assert client.get("/api/dashboard/summary").json()["totalLogs"] == 0
+    assert client.get("/api/signatures").json()["total"] == signatures_before
+    assert _signature_matches(client, "SIG-003") == 0
+    assert client.get("/api/settings").json()["orgName"] == "Keep Me"
+    assert _upload(client).status_code == 200  # can upload again afterwards
+
+
+def test_database_created_before_upload_tracking_is_migrated(tmp_path, monkeypatch):
+    monkeypatch.setenv("CYVERA_DB_PATH", str(tmp_path / "old.db"))
+    database.initialize_database()
+    with database.connection() as conn:
+        for table in ("logs", "alerts"):
+            conn.execute(f"DROP INDEX idx_{table}_upload")
+            conn.execute(f"ALTER TABLE {table} DROP COLUMN upload_id")
+        conn.execute(
+            "INSERT INTO logs (id, timestamp, severity, type, source_ip, payload) VALUES ('LOG-OLD00001', '2026-10-25T10:00:00+00:00', 'info', 'application', '10.0.0.1', '{}')"
+        )
+
+    database.initialize_database()
+
+    with database.connection() as conn:
+        assert "upload_id" in {row["name"] for row in conn.execute("PRAGMA table_info(logs)")}
+        assert "upload_id" in {row["name"] for row in conn.execute("PRAGMA table_info(alerts)")}
+        assert conn.execute("SELECT upload_id FROM logs WHERE id = 'LOG-OLD00001'").fetchone()["upload_id"] is None

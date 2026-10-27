@@ -59,6 +59,11 @@ override it. The API accepts requests from the Vite origins by default; set
   and its time windows follow the newest uploaded event. Demo logs live in
   `sample_logs/`. Older databases have their former demo logs/alerts removed on
   startup. Set `CYVERA_DB_PATH` to select another database path.
+- Every log and alert remembers which upload created it. `GET /api/uploads`
+  lists uploads; `DELETE /api/uploads/{jobId}` removes one upload with its logs and
+  alerts (and subtracts its signature match counts); `DELETE /api/data?confirm=true`
+  removes all uploaded data but keeps signatures and settings. Data uploaded before
+  this tracking existed has no upload id, so only "clear all" can remove it.
 - Upload analysis currently runs synchronously and returns a completed job;
   job results are persisted for the status endpoint.
 

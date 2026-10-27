@@ -208,6 +208,7 @@ async def upload_log_file(file: UploadFile = File(...)):
         raise HTTPException(status_code=503, detail=str(error)) from error
 
     detections = results["detections"]
+    job_id = database.new_id("JOB")
     signatures_matched: set[str] = set()
     threats_found = 0
     for detection in detections:
@@ -245,9 +246,9 @@ async def upload_log_file(file: UploadFile = File(...)):
             "status": "open",
             "assignedTo": None,
             "relatedLogIds": [log["id"]],
-        })
+        }, upload_id=job_id)
 
-    database.insert_logs(logs)
+    database.insert_logs(logs, upload_id=job_id)
     for signature_id in signatures_matched:
         signature = database.get_signature(signature_id)
         if signature:
@@ -258,7 +259,6 @@ async def upload_log_file(file: UploadFile = File(...)):
             signature["updatedAt"] = database.now_iso()
             database.save_signature(signature)
 
-    job_id = database.new_id("JOB")
     job = {
         "jobId": job_id,
         "filename": filename,
@@ -275,6 +275,28 @@ async def upload_log_file(file: UploadFile = File(...)):
     database.save_job(job)
     logger.info("Analyzed %s events from %s; created %s detections", len(logs), filename, len(detections))
     return job
+
+
+@app.get("/api/uploads")
+def list_uploads():
+    items = database.list_jobs()
+    return {"items": items, "total": len(items)}
+
+
+@app.delete("/api/uploads/{job_id}")
+def delete_upload(job_id: str):
+    result = database.delete_upload(job_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Upload not found")
+    return {"deleted": job_id, **result}
+
+
+@app.delete("/api/data")
+def clear_data(confirm: bool = False):
+    """Delete all uploaded logs, alerts and upload records (signatures/settings stay)."""
+    if not confirm:
+        raise HTTPException(status_code=400, detail="Pass confirm=true to delete all uploaded data")
+    return database.clear_all_data()
 
 
 @app.get("/api/logs/analysis/{job_id}")

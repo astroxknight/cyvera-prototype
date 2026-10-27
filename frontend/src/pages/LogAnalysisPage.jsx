@@ -13,6 +13,7 @@ import {
   LoadingRows,
 } from '../components/common/UI';
 import FileUpload from '../components/logs/FileUpload';
+import UploadHistory from '../components/logs/UploadHistory';
 import { formatBytes, formatRelativeTime, formatDateTime } from '../utils/format';
 
 const SEVERITY_OPTIONS = [
@@ -81,6 +82,13 @@ export default function LogAnalysisPage() {
       <FileUpload
         onComplete={(j) => {
           setActiveJob(j);
+          load();
+        }}
+      />
+
+      <UploadHistory
+        onChanged={() => {
+          setActiveJob(null);
           load();
         }}
       />
