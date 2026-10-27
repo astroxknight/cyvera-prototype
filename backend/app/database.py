@@ -11,6 +11,11 @@ from typing import Any, Iterator
 
 from app import data
 
+LEGACY_SEED_LOG_IDS = (
+    "LOG-78421", "LOG-78422", "LOG-78424", "LOG-78425", "LOG-78427", "LOG-78429", "LOG-78432",
+)
+LEGACY_SEED_ALERT_IDS = ("ALR-2901", "ALR-2902", "ALR-2903", "ALR-2904", "ALR-2905")
+
 DEFAULT_DATABASE_PATH = Path(__file__).resolve().parent.parent / "cyvera.db"
 
 
@@ -77,22 +82,9 @@ def initialize_database() -> None:
             );
             """
         )
-        if conn.execute("SELECT COUNT(*) FROM logs").fetchone()[0] == 0:
-            conn.executemany(
-                "INSERT INTO logs (id, timestamp, severity, type, source_ip, payload) VALUES (?, ?, ?, ?, ?, ?)",
-                [
-                    (item["id"], item["timestamp"], item["severity"], item["type"], item["sourceIp"], json.dumps(item))
-                    for item in data.logs
-                ],
-            )
-        if conn.execute("SELECT COUNT(*) FROM alerts").fetchone()[0] == 0:
-            conn.executemany(
-                "INSERT INTO alerts (id, timestamp, severity, status, payload) VALUES (?, ?, ?, ?, ?)",
-                [
-                    (item["id"], item["timestamp"], item["severity"], item["status"], json.dumps(item))
-                    for item in data.alerts
-                ],
-            )
+        # Older databases were seeded with demo logs/alerts; remove exactly those rows.
+        conn.executemany("DELETE FROM logs WHERE id = ?", [(i,) for i in LEGACY_SEED_LOG_IDS])
+        conn.executemany("DELETE FROM alerts WHERE id = ?", [(i,) for i in LEGACY_SEED_ALERT_IDS])
         if conn.execute("SELECT COUNT(*) FROM signatures").fetchone()[0] == 0:
             conn.executemany(
                 "INSERT INTO signatures (id, enabled, payload) VALUES (?, ?, ?)",

@@ -65,6 +65,13 @@ def _event_datetime(item: dict[str, Any]) -> datetime | None:
         return None
 
 
+def _reference_time(*collections: list[dict[str, Any]]) -> datetime:
+    """Newest event time across the stored data, so dashboard windows follow
+    the uploaded logs rather than the wall clock (falls back to now if empty)."""
+    times = [t for items in collections for item in items if (t := _event_datetime(item))]
+    return max(times) if times else datetime.now(timezone.utc)
+
+
 def _percent_change(current: int, previous: int) -> float:
     if previous == 0:
         return 0.0
@@ -77,7 +84,7 @@ def _percent_change(current: int, previous: int) -> float:
 def get_dashboard_summary():
     logs = database.list_logs()
     alerts = database.list_alerts()
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+    cutoff = _reference_time(logs, alerts) - timedelta(hours=24)
     previous_cutoff = cutoff - timedelta(hours=24)
     recent_logs = [log for log in logs if cutoff <= (_event_datetime(log) or datetime.min.replace(tzinfo=timezone.utc))]
     previous_logs = [log for log in logs if previous_cutoff <= (_event_datetime(log) or datetime.min.replace(tzinfo=timezone.utc)) < cutoff]
@@ -103,18 +110,20 @@ def get_dashboard_summary():
 
 @app.get("/api/dashboard/trend")
 def get_trend():
-    today = datetime.now(timezone.utc).date()
+    logs = database.list_logs()
+    alerts = database.list_alerts()
+    today = _reference_time(logs, alerts).date()
     dates = [today - timedelta(days=offset) for offset in range(6, -1, -1)]
     result = {
         day.isoformat(): {"date": day.isoformat(), "threats": 0, "anomalies": 0, "normal": 0}
         for day in dates
     }
-    for log in database.list_logs():
+    for log in logs:
         event_time = _event_datetime(log)
         bucket = result.get(event_time.date().isoformat()) if event_time else None
         if bucket and log["severity"] in ("info", "low"):
             bucket["normal"] += 1
-    for alert in database.list_alerts():
+    for alert in alerts:
         event_time = _event_datetime(alert)
         bucket = result.get(event_time.date().isoformat()) if event_time else None
         if bucket:
@@ -146,7 +155,8 @@ def get_severity_distribution():
 
 @app.get("/api/dashboard/hourly-activity")
 def get_hourly_activity():
-    current_hour = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+    logs = database.list_logs()
+    current_hour = _reference_time(logs).replace(minute=0, second=0, microsecond=0)
     buckets = {
         (current_hour - timedelta(hours=offset)).strftime("%Y-%m-%dT%H"): {
             "hour": (current_hour - timedelta(hours=offset)).strftime("%H:00"),
@@ -155,7 +165,7 @@ def get_hourly_activity():
         }
         for offset in range(23, -1, -1)
     }
-    for log in database.list_logs():
+    for log in logs:
         event_time = _event_datetime(log)
         bucket = buckets.get(event_time.strftime("%Y-%m-%dT%H")) if event_time else None
         if bucket:

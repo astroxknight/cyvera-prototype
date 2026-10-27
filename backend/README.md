@@ -53,8 +53,12 @@ override it. The API accepts requests from the Vite origins by default; set
   (always at least one) so small uploads are not flooded with alerts. Smaller or uniform batches skip ML scoring rather than producing
   unreliable results. The model is fit per upload batch and is not a trained
   production baseline.
-- SQLite is created at `backend/cyvera.db` on first startup and seeded once
-  from `app/data.py`. Set `CYVERA_DB_PATH` to select another database path.
+- SQLite is created at `backend/cyvera.db` on first startup. Only detection
+  signatures and default settings are seeded (from `app/data.py`); there are no
+  pre-loaded logs or alerts, so the dashboard is empty until a file is uploaded
+  and its time windows follow the newest uploaded event. Demo logs live in
+  `sample_logs/`. Older databases have their former demo logs/alerts removed on
+  startup. Set `CYVERA_DB_PATH` to select another database path.
 - Upload analysis currently runs synchronously and returns a completed job;
   job results are persisted for the status endpoint.
 

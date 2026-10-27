@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   FileText,
   ShieldAlert,
@@ -6,6 +7,7 @@ import {
   CheckCircle,
   Download,
   RefreshCw,
+  Upload,
 } from 'lucide-react';
 import {
   fetchDashboardSummary,
@@ -13,13 +15,14 @@ import {
   fetchSeverityDistribution,
   fetchHourlyActivity,
   fetchAlerts,
+  fetchSignatures,
 } from '../services/api';
 import StatCard from '../components/dashboard/StatCard';
 import ThreatTrendChart from '../components/dashboard/ThreatTrendChart';
 import SeverityDistribution from '../components/dashboard/SeverityDistribution';
 import HourlyActivityChart from '../components/dashboard/HourlyActivityChart';
 import RecentAlertsList from '../components/dashboard/RecentAlertsList';
-import { Card, ErrorState } from '../components/common/UI';
+import { Card, EmptyState, ErrorState } from '../components/common/UI';
 
 export default function DashboardPage() {
   const [summary, setSummary] = useState(null);
@@ -27,6 +30,7 @@ export default function DashboardPage() {
   const [severity, setSeverity] = useState([]);
   const [activity, setActivity] = useState([]);
   const [recentAlerts, setRecentAlerts] = useState([]);
+  const [activeSignatures, setActiveSignatures] = useState(0);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -34,18 +38,20 @@ export default function DashboardPage() {
     setLoading(true);
     setError(null);
     try {
-      const [s, t, sev, act, alerts] = await Promise.all([
+      const [s, t, sev, act, alerts, sigs] = await Promise.all([
         fetchDashboardSummary(),
         fetchTrend(),
         fetchSeverityDistribution(),
         fetchHourlyActivity(),
         fetchAlerts({}),
+        fetchSignatures({ enabled: true }),
       ]);
       setSummary(s);
       setTrend(t);
       setSeverity(sev);
       setActivity(act);
       setRecentAlerts(alerts.items);
+      setActiveSignatures(sigs.total);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -56,6 +62,9 @@ export default function DashboardPage() {
   useEffect(() => {
     load();
   }, []);
+
+  // Nothing is pre-loaded: every number below comes from uploaded log files.
+  const hasData = (summary?.totalLogs ?? 0) > 0;
 
   if (error && !summary) {
     return <ErrorState message={error} onRetry={load} />;
@@ -117,6 +126,22 @@ export default function DashboardPage() {
         />
       </div>
 
+      {!loading && !hasData ? (
+        <Card>
+          <EmptyState
+            icon={<Upload size={22} />}
+            title="No data yet"
+            message="Upload a log file in Log Analysis. The dashboard will only show what comes from the logs you upload."
+          />
+          <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: 20 }}>
+            <Link to="/logs" className="btn btn-primary">
+              <Upload size={14} />
+              Upload logs
+            </Link>
+          </div>
+        </Card>
+      ) : (
+        <>
       <Card
         title="Threat & Anomaly Trends"
         subtitle="Detected threats vs. anomalies over the last 7 days"
@@ -180,11 +205,9 @@ export default function DashboardPage() {
         <Card title="System Health" subtitle="Detector and ingestion status">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '4px 0' }}>
             {[
-              { label: 'Log Ingestion', status: 'Operational', value: '2.1K ev/s' },
-              { label: 'Signature Engine', status: 'Operational', value: '8 active' },
-              { label: 'Anomaly Model', status: 'Operational', value: 'v2.4.1' },
-              { label: 'Alert Dispatcher', status: 'Operational', value: '0 backlog' },
-              { label: 'Threat Intel Feed', status: 'Degraded', value: 'last sync 42m' },
+              { label: 'Log Ingestion', status: 'Operational', value: `${summary?.totalLogs ?? 0} events (24h)` },
+              { label: 'Signature Engine', status: 'Operational', value: `${activeSignatures} active` },
+              { label: 'Anomaly Model', status: 'Operational', value: 'Isolation Forest' },
             ].map((row) => (
               <div
                 key={row.label}
@@ -227,6 +250,8 @@ export default function DashboardPage() {
           </div>
         </Card>
       </div>
+        </>
+      )}
     </>
   );
 }

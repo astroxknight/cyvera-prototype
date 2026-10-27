@@ -15,32 +15,73 @@ def client(tmp_path, monkeypatch):
         yield test_client
 
 
-def test_existing_log_alert_and_dashboard_contracts_are_served(client):
-    logs = client.get("/api/logs")
-    alerts = client.get("/api/alerts")
-    summary = client.get("/api/dashboard/summary")
+PROBE_CSV = (
+    "timestamp,sourceIp,destinationIp,method,endpoint,statusCode,bytes,message\n"
+    "2026-10-25T10:00:00Z,203.0.113.250,10.0.0.20,GET,/.env,404,32,Sensitive file probe\n"
+    "2026-10-25T10:00:01Z,10.0.0.1,10.0.0.2,GET,/health,200,50,Health check\n"
+)
+
+
+def _upload(client, content=PROBE_CSV, name="events.csv"):
+    return client.post("/api/logs/upload", files={"file": (name, io.BytesIO(content.encode()), "text/csv")})
+
+
+def test_fresh_database_has_no_logs_alerts_or_dashboard_data(client):
+    assert client.get("/api/logs").json() == {"items": [], "total": 0}
+    assert client.get("/api/alerts").json() == {"items": [], "total": 0}
+    summary = client.get("/api/dashboard/summary").json()
+    assert (summary["totalLogs"], summary["threatsDetected"], summary["anomalies"], summary["normalLogs"]) == (0, 0, 0, 0)
     trend = client.get("/api/dashboard/trend").json()
-    severity = client.get("/api/dashboard/severity-distribution").json()
+    assert len(trend) == 7 and all(day["threats"] == day["anomalies"] == day["normal"] == 0 for day in trend)
+    assert all(slice_["value"] == 0 for slice_ in client.get("/api/dashboard/severity-distribution").json())
+    assert all(hour["logs"] == hour["threats"] == 0 for hour in client.get("/api/dashboard/hourly-activity").json())
+    assert all(sig["matches"] == 0 for sig in client.get("/api/signatures").json()["items"])
+
+
+def test_dashboard_reflects_only_uploaded_logs_even_when_old(client):
+    assert _upload(client).status_code == 200  # events are from 2026-10-25, not "now"
+
+    summary = client.get("/api/dashboard/summary").json()
+    trend = client.get("/api/dashboard/trend").json()
+    severity = {item["name"]: item["value"] for item in client.get("/api/dashboard/severity-distribution").json()}
     activity = client.get("/api/dashboard/hourly-activity").json()
 
-    assert logs.status_code == 200
-    assert {"id", "timestamp", "sourceIp", "destinationIp", "severity", "type"} <= logs.json()["items"][0].keys()
-    assert alerts.json()["items"]
-    assert {"totalLogs", "threatsDetected", "anomalies", "normalLogs"} <= summary.json().keys()
-    assert len(trend) == 7 and {"date", "threats", "anomalies", "normal"} <= trend[0].keys()
-    assert {"name", "value", "color"} <= severity[0].keys()
-    assert {"hour", "logs", "threats"} <= activity[0].keys()
+    assert summary["totalLogs"] == 2 and summary["threatsDetected"] >= 1
+    assert trend[-1]["date"] == "2026-10-25" and trend[-1]["normal"] >= 1
+    assert severity["High"] >= 1 and sum(severity.values()) == 2
+    assert sum(hour["logs"] for hour in activity) == 2
 
 
 def test_alert_detail_returns_related_records_and_status_is_validated(client):
-    detail = client.get("/api/alerts/ALR-2901")
+    _upload(client)
+    alert = next(
+        item for item in client.get("/api/alerts").json()["items"] if item["signatureId"] == "SIG-003"
+    )
+
+    detail = client.get(f"/api/alerts/{alert['id']}")
 
     assert detail.status_code == 200
-    assert detail.json()["alert"]["id"] == "ALR-2901"
-    assert detail.json()["signature"]["id"] == "SIG-001"
-    assert detail.json()["logs"][0]["id"] == "LOG-78427"
-    assert client.patch("/api/alerts/ALR-2901/status", json={"status": "resolved"}).json()["status"] == "resolved"
-    assert client.patch("/api/alerts/ALR-2901/status", json={"status": "bad-state"}).status_code == 422
+    assert detail.json()["alert"]["id"] == alert["id"]
+    assert detail.json()["signature"]["id"] == "SIG-003"
+    assert detail.json()["logs"][0]["id"] == alert["relatedLogIds"][0]
+    assert client.patch(f"/api/alerts/{alert['id']}/status", json={"status": "resolved"}).json()["status"] == "resolved"
+    assert client.patch(f"/api/alerts/{alert['id']}/status", json={"status": "bad-state"}).status_code == 422
+
+
+def test_legacy_seeded_logs_and_alerts_are_removed_on_startup(tmp_path, monkeypatch):
+    monkeypatch.setenv("CYVERA_DB_PATH", str(tmp_path / "legacy.db"))
+    database.initialize_database()
+    row = ("2026-10-25T10:00:00+00:00", "info", "application", "10.0.0.1", "{}")
+    with database.connection() as conn:
+        conn.execute("INSERT INTO logs VALUES ('LOG-78421', ?, ?, ?, ?, ?)", row)
+        conn.execute("INSERT INTO logs VALUES ('LOG-REAL0001', ?, ?, ?, ?, ?)", row)
+        conn.execute("INSERT INTO alerts VALUES ('ALR-2901', ?, 'high', 'open', '{}')", (row[0],))
+
+    database.initialize_database()
+
+    with database.connection() as conn:
+        assert [r["id"] for r in conn.execute("SELECT id FROM logs")] == ["LOG-REAL0001"]
+        assert conn.execute("SELECT COUNT(*) FROM alerts").fetchone()[0] == 0
 
 
 def test_csv_upload_persists_events_and_signature_alerts(client):
