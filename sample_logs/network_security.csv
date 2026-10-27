@@ -1,0 +1,9 @@
+timestamp,source_ip,destination_ip,method,endpoint,status_code,severity,type,message,user_agent,bytes
+2026-10-28T09:30:00Z,192.168.1.25,192.168.1.10,GET,/api/health,200,info,application,Health check passed,Mozilla/5.0,64
+2026-10-28T09:31:00Z,203.0.113.45,192.168.1.10,GET,/.env,403,high,reconnaissance,Sensitive configuration probe,curl/8.5.0,287
+2026-10-28T09:32:00Z,192.168.1.31,192.168.1.10,POST,/api/login,200,info,authentication,User login successful,Mozilla/5.0,812
+2026-10-28T09:33:00Z,203.0.113.88,192.168.1.10,GET,/.git/config,403,high,reconnaissance,Git configuration probe,python-requests/2.32,287
+2026-10-28T09:34:00Z,198.51.100.72,192.168.1.10,GET,/api/export,200,medium,data-transfer,Unusually large response,Mozilla/5.0,125000000
+2026-10-28T09:35:00Z,192.168.1.42,192.168.1.10,GET,/dashboard,200,info,application,Dashboard request,Mozilla/5.0,4820
+2026-10-28T09:36:00Z,203.0.113.77,192.168.1.10,POST,/api/login,401,medium,authentication,Login failed: 15 failed attempts in 60s,Python-urllib/3.12,256
+2026-10-28T09:37:00Z,192.168.1.25,192.168.1.10,GET,/reports,200,info,application,Reports page loaded,Mozilla/5.0,10240

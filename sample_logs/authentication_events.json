@@ -1,0 +1,88 @@
+{
+  "logs": [
+    {
+      "id": "AUTH-001",
+      "timestamp": "2026-10-28T09:20:00Z",
+      "sourceIp": "192.168.1.25",
+      "destinationIp": "192.168.1.10",
+      "method": "POST",
+      "endpoint": "/api/login",
+      "statusCode": 200,
+      "severity": "info",
+      "type": "authentication",
+      "message": "User analyst authenticated successfully",
+      "userAgent": "Mozilla/5.0",
+      "bytes": 812
+    },
+    {
+      "id": "AUTH-002",
+      "timestamp": "2026-10-28T09:21:00Z",
+      "sourceIp": "203.0.113.77",
+      "destinationIp": "192.168.1.10",
+      "method": "POST",
+      "endpoint": "/api/login",
+      "statusCode": 401,
+      "severity": "medium",
+      "type": "authentication",
+      "message": "Login failed: 15 failed attempts in 60s",
+      "userAgent": "Python-urllib/3.12",
+      "bytes": 256
+    },
+    {
+      "id": "AUTH-003",
+      "timestamp": "2026-10-28T09:22:00Z",
+      "sourceIp": "203.0.113.77",
+      "destinationIp": "192.168.1.10",
+      "method": "POST",
+      "endpoint": "/api/login",
+      "statusCode": 401,
+      "severity": "medium",
+      "type": "authentication",
+      "message": "Login failed: 12 failures in 45s",
+      "userAgent": "Python-urllib/3.12",
+      "bytes": 256
+    },
+    {
+      "id": "AUTH-004",
+      "timestamp": "2026-10-28T09:23:00Z",
+      "sourceIp": "192.168.1.31",
+      "destinationIp": "192.168.1.10",
+      "method": "POST",
+      "endpoint": "/api/login",
+      "statusCode": 401,
+      "severity": "medium",
+      "type": "authentication",
+      "message": "Login failed: invalid password",
+      "userAgent": "Mozilla/5.0",
+      "bytes": 240
+    },
+    {
+      "id": "AUTH-005",
+      "timestamp": "2026-10-28T09:24:00Z",
+      "sourceIp": "192.168.1.25",
+      "destinationIp": "192.168.1.10",
+      "method": "POST",
+      "endpoint": "/api/logout",
+      "statusCode": 200,
+      "severity": "info",
+      "type": "authentication",
+      "message": "User analyst logged out",
+      "userAgent": "Mozilla/5.0",
+      "bytes": 128
+    },
+    {
+      "id": "AUTH-006",
+      "timestamp": "2026-10-28T09:25:00Z",
+      "sourceIp": "198.51.100.55",
+      "destinationIp": "192.168.1.10",
+      "method": "POST",
+      "endpoint": "/api/login",
+      "statusCode": 403,
+      "severity": "medium",
+      "type": "authentication",
+      "message": "Authentication denied by access policy",
+      "userAgent": "curl/8.5.0",
+      "bytes": 320
+    }
+  ]
+}

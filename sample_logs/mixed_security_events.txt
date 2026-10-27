@@ -1,0 +1,8 @@
+2026-10-28T10:10:00Z INFO 192.168.1.25 GET /api/health 200 Health check successful
+2026-10-28T10:10:15Z INFO 192.168.1.31 GET /dashboard 200 Dashboard loaded
+2026-10-28T10:11:00Z WARN 203.0.113.45 GET /.env 403 Sensitive configuration access blocked
+2026-10-28T10:11:10Z WARN 203.0.113.45 GET /wp-config.php 404 Sensitive configuration file requested
+2026-10-28T10:12:00Z ERROR 192.168.1.42 POST /api/upload 500 Upload service failed
+2026-10-28T10:12:30Z INFO 192.168.1.25 GET /reports 200 Reports loaded successfully
+2026-10-28T10:13:00Z WARN 203.0.113.77 POST /api/login 401 Login failed: 15 failed attempts in 60s
+2026-10-28T10:13:30Z INFO 192.168.1.31 POST /api/login 200 Authentication successful
