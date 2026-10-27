@@ -78,7 +78,12 @@ export default function LogAnalysisPage() {
         </div>
       </div>
 
-      <FileUpload onComplete={(j) => setActiveJob(j)} />
+      <FileUpload
+        onComplete={(j) => {
+          setActiveJob(j);
+          load();
+        }}
+      />
 
       {activeJob && (
         <div
