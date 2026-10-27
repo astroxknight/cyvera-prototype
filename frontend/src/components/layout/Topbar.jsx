@@ -1,6 +1,7 @@
 import { useLocation } from 'react-router-dom';
 import { Search, Bell, RefreshCw, Download } from 'lucide-react';
 import { useState } from 'react';
+import { useOpenAlertCount } from '../../hooks/useOpenAlertCount';
 
 const pageInfo = {
   '/': { title: 'Dashboard', subtitle: 'Real-time security posture overview' },
@@ -15,6 +16,7 @@ export default function Topbar({ onSearch }) {
   const location = useLocation();
   const info = pageInfo[location.pathname] || { title: 'CYVERA', subtitle: '' };
   const [query, setQuery] = useState('');
+  const openAlerts = useOpenAlertCount();
 
   return (
     <header className="topbar">
@@ -42,9 +44,12 @@ export default function Topbar({ onSearch }) {
         <button className="icon-btn" title="Export">
           <Download size={16} />
         </button>
-        <button className="icon-btn" title="Notifications">
+        <button
+          className="icon-btn"
+          title={openAlerts > 0 ? `${openAlerts} open alerts` : 'No open alerts'}
+        >
           <Bell size={16} />
-          <span className="dot" />
+          {openAlerts > 0 && <span className="dot" />}
         </button>
         <div className="avatar" title="SOC Analyst">SA</div>
       </div>

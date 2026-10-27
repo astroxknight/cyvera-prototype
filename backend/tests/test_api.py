@@ -162,3 +162,15 @@ def test_unknown_resources_return_404(client):
         "severity": "low",
         "category": "test",
     }).status_code == 404
+
+
+def test_open_alert_count_follows_uploads_and_status_changes(client):
+    assert client.get("/api/alerts", params={"status": "open"}).json()["total"] == 0
+
+    _upload(client)
+    open_alerts = client.get("/api/alerts", params={"status": "open"}).json()
+    assert open_alerts["total"] == len(client.get("/api/alerts").json()["items"]) >= 1
+
+    first = open_alerts["items"][0]["id"]
+    client.patch(f"/api/alerts/{first}/status", json={"status": "resolved"})
+    assert client.get("/api/alerts", params={"status": "open"}).json()["total"] == open_alerts["total"] - 1

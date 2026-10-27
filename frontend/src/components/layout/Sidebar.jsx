@@ -8,18 +8,21 @@ import {
   Settings,
   ShieldCheck,
 } from 'lucide-react';
+import { useOpenAlertCount } from '../../hooks/useOpenAlertCount';
 import './../../styles/components.css';
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, exact: true },
   { to: '/logs', label: 'Log Analysis', icon: FileSearch },
-  { to: '/alerts', label: 'Alerts', icon: Bell, badge: 3 },
+  { to: '/alerts', label: 'Alerts', icon: Bell },
   { to: '/signatures', label: 'Signatures', icon: Shield },
   { to: '/reports', label: 'Reports', icon: FileBarChart },
   { to: '/settings', label: 'Settings', icon: Settings },
 ];
 
 export default function Sidebar() {
+  const openAlerts = useOpenAlertCount();
+
   return (
     <aside className="sidebar">
       <div className="sidebar-brand">
@@ -36,6 +39,7 @@ export default function Sidebar() {
       <nav className="sidebar-nav">
         {navItems.map((item) => {
           const Icon = item.icon;
+          const badge = item.to === '/alerts' ? openAlerts : 0;
           return (
             <NavLink
               key={item.to}
@@ -49,8 +53,10 @@ export default function Sidebar() {
                 <Icon size={16} strokeWidth={2} />
               </span>
               <span>{item.label}</span>
-              {item.badge ? (
-                <span className="nav-item-badge">{item.badge}</span>
+              {badge > 0 ? (
+                <span className="nav-item-badge" title="Open alerts">
+                  {badge > 99 ? '99+' : badge}
+                </span>
               ) : null}
             </NavLink>
           );

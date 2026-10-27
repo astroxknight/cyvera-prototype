@@ -23,6 +23,11 @@ async function request(path, options) {
   return result;
 }
 
+// Fired after any call that changes alerts/logs so shared UI (sidebar badge,
+// top-bar dot) can refresh without a page reload.
+export const DATA_CHANGED_EVENT = 'cyvera:data-changed';
+const notifyDataChanged = () => window.dispatchEvent(new Event(DATA_CHANGED_EVENT));
+
 function queryString(filters = {}) {
   const params = new URLSearchParams();
   Object.entries(filters).forEach(([key, value]) => {
@@ -68,7 +73,9 @@ export async function uploadLogFile(file) {
   }
   const form = new FormData();
   form.append('file', file);
-  return request('/logs/upload', { method: 'POST', body: form });
+  const job = await request('/logs/upload', { method: 'POST', body: form });
+  notifyDataChanged();
+  return job;
 }
 
 export async function fetchAnalysisStatus(jobId) {
@@ -86,11 +93,13 @@ export async function fetchAlertById(id) {
 }
 
 export async function updateAlertStatus(id, status) {
-  return request(`/alerts/${encodeURIComponent(id)}/status`, {
+  const alert = await request(`/alerts/${encodeURIComponent(id)}/status`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ status }),
   });
+  notifyDataChanged();
+  return alert;
 }
 
 // -------- Signatures --------
