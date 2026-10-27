@@ -8,13 +8,16 @@ contracts.
 
 ## Setup
 
+Requires Python 3.10 or newer. Runtime dependencies are in `requirements.txt`;
+`requirements-dev.txt` adds the test tools (pytest, httpx).
+
 Windows PowerShell:
 
 ```powershell
 cd backend
 py -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
+python -m pip install -r requirements-dev.txt
 uvicorn app.main:app --reload --port 8000
 ```
 
@@ -24,7 +27,7 @@ macOS/Linux:
 cd backend
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install -r requirements.txt
+python -m pip install -r requirements-dev.txt
 uvicorn app.main:app --reload --port 8000
 ```
 
@@ -43,9 +46,11 @@ override it. The API accepts requests from the Vite origins by default; set
   to the event shape consumed by the frontend.
 - Enabled signatures run against each normalized event. Regex signatures work
   directly; the seeded natural-language rules for brute force, webshells,
-  sensitive-file probes, and Tor indicators have built-in matching behavior.
+  sensitive-file probes, and Tor indicators have built-in matching behavior. The brute-force rule only fires when the event
+  reports 10 or more failed attempts; the Tor rule matches the whole word "tor".
 - Isolation Forest runs on batches of at least five events with feature
-  variation. Smaller or uniform batches skip ML scoring rather than producing
+  variation, and reports at most the top 20% highest-scoring events of a batch
+  (always at least one) so small uploads are not flooded with alerts. Smaller or uniform batches skip ML scoring rather than producing
   unreliable results. The model is fit per upload batch and is not a trained
   production baseline.
 - SQLite is created at `backend/cyvera.db` on first startup and seeded once

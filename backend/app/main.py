@@ -24,8 +24,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app import database
-from app.detection import classify_threat_severity, run_detection
-from app.parsing import MAX_LOG_RECORDS, parse_log_content
+from app.detection import SEVERITY_ORDER, classify_threat_severity, run_detection
+from app.parsing import parse_log_content
 from app.schemas import AlertStatusUpdate, SettingsPayload, SignaturePayload
 
 logging.basicConfig(level=os.environ.get("CYVERA_LOG_LEVEL", "INFO").upper())
@@ -220,7 +220,7 @@ async def upload_log_file(file: UploadFile = File(...)):
         severity = classify_threat_severity(base_severity, score, log["bytes"])
         if severity in ("critical", "high"):
             threats_found += 1
-        if severity in ("critical", "high", "medium") and SEVERITY_RANK[severity] > SEVERITY_RANK[log["severity"]]:
+        if severity in ("critical", "high", "medium") and SEVERITY_ORDER[severity] > SEVERITY_ORDER[log["severity"]]:
             log["severity"] = severity
         database.save_alert({
             "id": database.new_id("ALR"),
@@ -373,5 +373,3 @@ def get_settings():
 def save_settings(payload: SettingsPayload):
     return database.update_settings(payload.model_dump(exclude_unset=True, exclude_none=True))
 
-
-SEVERITY_RANK = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}

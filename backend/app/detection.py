@@ -1,9 +1,15 @@
 """Signature and Isolation Forest detection for normalized events."""
 
 import ipaddress
+import math
 import re
 from datetime import datetime
 from typing import Any
+
+# Isolation Forest on a tiny batch flags far too many events, so cap the share
+# of a batch that can be reported as anomalous (the highest-scoring events win).
+MAX_ANOMALY_FRACTION = 0.2
+BRUTE_FORCE_THRESHOLD = 10
 
 SEVERITY_ORDER = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
 
@@ -31,14 +37,17 @@ def signature_matches(signature: dict[str, Any], log: dict[str, Any]) -> bool:
     rule = " ".join((signature.get("name", ""), signature.get("description", ""), pattern)).lower()
     event = text.lower()
     if "brute" in rule or "failure_count" in rule or "credential stuffing" in rule:
-        count = re.search(r"(\d+)\s+(?:failed|failure)", event)
-        return "login" in event and ("failed" in event or "failure" in event) and (not count or int(count.group(1)) >= 10)
+        # A single failed login is not brute force: only match when the event
+        # reports an attempt count ("12 failed ..." or "(12 in 60s)") at/above the threshold.
+        count = re.search(r"(\d+)\s+(?:failed|failure)|\((\d+)\s+in\s+\d+\s*s", event)
+        attempts = int(next(group for group in count.groups() if group)) if count else 0
+        return "login" in event and ("failed" in event or "failure" in event) and attempts >= BRUTE_FORCE_THRESHOLD
     if "webshell" in rule or "malware" in rule:
         return any(term in event for term in ("webshell", "base64_decode", "eval(", "system("))
     if "sensitive file" in rule:
         return bool(re.search(r"(?:/\.env|wp-config\.php|/\.git/config|config\.php)", event))
     if "tor" in rule or "threat_feed" in rule:
-        return "tor" in event or "known malicious" in event
+        return bool(re.search(r"\btor\b|known malicious", event))
     return False
 
 
@@ -81,12 +90,14 @@ def find_anomalies(logs: list[dict[str, Any]]) -> dict[str, float]:
     features = [_features(log) for log in logs]
     predictions = model.fit_predict(features)
     decision_scores = model.decision_function(features)
-    anomalies: dict[str, float] = {}
+    scored: list[tuple[str, float]] = []
     for log, prediction, decision_score in zip(logs, predictions, decision_scores):
         if prediction == -1:
             score = max(0.5, min(0.99, 0.5 - float(decision_score)))
-            anomalies[log["id"]] = round(score, 3)
-    return anomalies
+            scored.append((log["id"], round(score, 3)))
+    limit = max(1, math.ceil(len(logs) * MAX_ANOMALY_FRACTION))
+    scored.sort(key=lambda item: item[1], reverse=True)
+    return dict(scored[:limit])
 
 
 def classify_threat_severity(base: str, anomaly_score: float | None = None, byte_count: int = 0) -> str:
